@@ -1,123 +1,149 @@
-# CineBook — Movie Ticketing Microservices
+# CineBook – Movie Ticket Booking Platform
 
-CineBook is a local movie catalog and ticket-booking application. A React frontend calls a Spring Cloud Gateway; Eureka discovers the Java services. MySQL stores users, movies, showtimes and bookings. Memurai/Redis holds ticket quantities temporarily before confirmation.
+**Browse movies, choose a showtime, and book tickets through a React client and Spring Boot microservices.**
 
-![Architecture](media/movie-ticketing-architecture.png)
+![Java](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.4-6DB33F?logo=springboot&logoColor=white) ![React](https://img.shields.io/badge/React-18-149ECA?logo=react&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white) ![Redis](https://img.shields.io/badge/Redis-Holds-DC382D?logo=redis&logoColor=white)
 
-## Features and architecture
+[Architecture](#architecture) · [Services](#services) · [Run locally](#run-locally) · [API](#api) · [GitHub repository](https://github.com/ROHAN-3105/CineBook)
 
-| Module | Purpose | Port | Dependencies |
-|---|---|---:|---|
-| `eureka-server` | Service registry and dashboard | 8762 | None |
-| `api-gateway` | Route discovery, JWT validation, local CORS | 9090 | Eureka; four APIs |
-| `user-service` | BCrypt registration, login, current user | Dynamic | MySQL; Eureka |
-| `movie-service` | Movie lookup and admin CRUD | Dynamic | MySQL; Eureka |
-| `showtime-service` | Showtime lookup, admin creation, Redis holds and inventory | Dynamic | MySQL; Memurai/Redis; Eureka; Movie and Booking Feign clients |
-| `booking-service` | Authenticated booking creation and owned history | Dynamic | MySQL; Eureka; User and Showtime Feign clients |
-| `frontend` | React UI | 5173 | Gateway |
+## Overview
 
-The stack is Java 17, Spring Boot 3.4.0, Spring Cloud 2024.0.0-RC1, Maven Wrapper 3.9.9, MySQL 8, Redis, React 18, TypeScript, Vite and Tailwind CSS. The four data services use `server.port=0`; use the gateway rather than their changing ports.
+CineBook pairs a React and TypeScript frontend with six Java services. Spring Cloud Gateway is the API entry point; Eureka discovers service instances. JWTs protect requests, MySQL stores accounts, movies, showtimes and bookings, and Redis holds ticket quantities while a booking is completed.
 
-A user logs in at `/api/user/login` and receives a raw five-hour JWT whose subject is the username and whose `role` claim is `USER` or `ADMIN`. The gateway validates the bearer token and forwards it to services. User Service protects `/api/user/me` and resolves the numeric user ID. Booking Service calls `/me` over Feign instead of trusting a browser-supplied `userId`. Movie and Showtime admin endpoints require `ADMIN`. **Existing limitation:** public registration still accepts a requested role; restrict that server-side before exposing this app publicly.
+## Architecture
 
-For a booking, Booking Service asks Showtime Service to create a five-minute quantity hold in Redis. Lua scripts atomically account for concurrent holds and remove expired ones. Confirmation reduces MySQL inventory under a pessimistic row lock; cancellation releases an active hold. Booking Service saves the booking after confirmation. Redis and the two MySQL services do not share a transaction: a crash between seat deduction and booking persistence requires reconciliation. The old direct seat-deduction endpoint responds with 410 Gone so it cannot bypass holds.
+![CineBook architecture](media/cinebook-architecture.png)
 
-## Project layout
+[Editable Mermaid source](media/cinebook-architecture.mmd)
+
+1. The frontend calls Gateway on port `9090`. Login returns a signed JWT; later requests carry it as a bearer token. Gateway validates the token and routes by service name.
+2. Eureka on port `8762` discovers User, Movie, Showtime and Booking services, each running on a dynamic port. Booking and Showtime use OpenFeign for service calls.
+3. Booking Service looks up the authenticated user, then asks Showtime Service for a temporary quantity hold. Redis Lua scripts account for concurrent holds and expiry (300 seconds by default).
+4. The owner may inspect or cancel an active hold. Confirmation deducts MySQL seat inventory under a pessimistic row lock; Booking Service then saves the booking.
+
+## Features
+
+| Area | Implemented behavior |
+|---|---|
+| Identity | Registration, BCrypt password storage, login, five-hour JWT, current-user lookup |
+| Authorization | Gateway JWT validation; `ADMIN` checks on movie and showtime management |
+| Catalog | Movie listing/details, admin movie CRUD, showtime listing/details and admin creation |
+| Tickets | Seat availability, Redis holds with expiry, confirmation and cancellation |
+| Bookings | Authenticated creation and owner-scoped **My Bookings** history |
+| Service calls | Eureka discovery and OpenFeign between Booking, Showtime, Movie and User services |
+
+## Technology
+
+| Layer | Stack |
+|---|---|
+| Frontend | React 18 · TypeScript 5 · Vite 6 · Tailwind CSS 3 |
+| Backend | Java 17 · Spring Boot 3.4 · Spring Security · JWT |
+| Data and caching | MySQL 8 · Redis / Memurai |
+| Communication | Spring Cloud Gateway · Eureka · OpenFeign |
+| Tools | Maven Wrapper · Node.js · npm · PowerShell |
+
+## Services
+
+| Module | Responsibility | Port |
+|---|---|---:|
+| [Eureka Server](eureka-server/README.md) | Service registry | `8762` |
+| [API Gateway](api-gateway/README.md) | Routing, JWT check, local CORS | `9090` |
+| [User Service](user-service/README.md) | Accounts, login and identity | Dynamic |
+| [Movie Service](movie-service/README.md) | Catalog and admin CRUD | Dynamic |
+| [Showtime Service](showtime-service/README.md) | Screenings, inventory and Redis holds | Dynamic |
+| [Booking Service](booking-service/README.md) | Bookings and owned history | Dynamic |
+| [Frontend](frontend/README.md) | React client | `5173` |
+
+## Screenshots
+
+No genuine application screenshots are stored in this repository yet. Add captures of the running CineBook frontend here.
+
+## Project structure
 
 ```text
-api-gateway/       Spring Cloud Gateway and JWT filter
-eureka-server/     Eureka registry
-user-service/      Authentication and user identity
+api-gateway/       Gateway routes and JWT filter
+eureka-server/     Service registry
+user-service/      Accounts and tokens
 movie-service/     Movie catalog
-showtime-service/  Showtime inventory and Redis reservations
-booking-service/   Bookings and owned history
-frontend/          React UI
-media/             Architecture diagram
-seed/              Repeatable sample movie/showtime SQL and runner
-scripts/           Reusable booking/reservation verification scripts
-service.ps1        Run or test one backend service
-start-all.ps1      Start all backend services in separate processes
+showtime-service/  Showtimes and Redis reservations
+booking-service/   Bookings and history
+frontend/          React and TypeScript UI
+media/             Architecture diagrams
+seed/              Repeatable sample data
+scripts/           Live flow checks
+service.ps1        Run or test one backend module
+start-all.ps1      Start all backend modules
 ```
 
-## Prerequisites and configuration
+## Run locally
 
-Install JDK 17, MySQL 8, Memurai/Redis on `localhost:6379`, and Node.js/npm. Each service includes its own `mvnw.cmd`; install no separate Maven. Create the existing `movie_ticketing` database if absent. Entity tables are managed by the current JPA `ddl-auto=update` configuration. The sample seed is optional; it preserves existing rows:
+**Prerequisites:** JDK 17, Node.js/npm, MySQL 8 and Redis or Memurai on `localhost:6379`. Each service includes `mvnw.cmd`; global Maven is unnecessary.
 
-```powershell
-.\seed\run-seed.ps1
-```
+1. Create the `movie_ticketing` MySQL database. The four data services use `jdbc:mysql://localhost:3306/movie_ticketing`, user `root`, and JPA `ddl-auto=update`.
+2. Create ignored `.local/application-local.properties` in the project root with your own values. Use one shared Base64 key of at least 32 random bytes across JWT services:
 
-Set `SPRING_DATASOURCE_PASSWORD` and one shared `JWT_SECRET` for all JWT services. The JWT key must be Base64 for at least 32 random bytes. `.env.example` lists variable names but is not loaded automatically. The startup script reads the ignored `.local/application-local.properties`; create it with your own values:
+   ```properties
+   spring.datasource.password=YOUR_LOCAL_MYSQL_PASSWORD
+   jwt.secret=YOUR_SHARED_BASE64_KEY
+   ```
 
-```properties
-spring.datasource.password=YOUR_LOCAL_MYSQL_PASSWORD
-jwt.secret=YOUR_SHARED_BASE64_KEY
-```
+   [`.env.example`](.env.example) documents variable names but is not loaded automatically. Generate a key in PowerShell with `$bytes=New-Object byte[] 64; [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes)`. Never commit local configuration.
+3. Start MySQL and Redis/Memurai. From the root run `.\start-all.ps1`, or start each service in a separate PowerShell terminal, Eureka first:
 
-Generate a key in PowerShell with `$bytes=New-Object byte[] 64; [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes)`. Store it only in local configuration or environment variables. Never commit `.local/`, real `.env` files, passwords or tokens. The gateway CORS origin is `http://localhost:5173`; the frontend `.env.example` points to `http://localhost:9090`. Reservation duration defaults to 300 seconds and can be set with `RESERVATION_DURATION_SECONDS` for testing. Redis is configured in Showtime Service at `localhost:6379`.
+   ```powershell
+   .\service.ps1 -Service eureka-server
+   .\service.ps1 -Service user-service
+   .\service.ps1 -Service movie-service
+   .\service.ps1 -Service showtime-service
+   .\service.ps1 -Service booking-service
+   .\service.ps1 -Service api-gateway
+   ```
 
-## Run locally (Windows PowerShell)
+4. Start the UI:
 
-From the project root, with MySQL and Redis running:
+   ```powershell
+   cd frontend
+   npm install
+   npm run dev
+   ```
 
-```powershell
-.\start-all.ps1
-```
+Open `http://localhost:5173`. `VITE_API_BASE_URL` defaults to `http://localhost:9090`; Gateway CORS permits `http://localhost:5173`. Optionally run `.\seed\run-seed.ps1` from the root to add repeatable movie and showtime data.
 
-Or use a separate terminal for each service, in this order:
+## API
 
-```powershell
-.\service.ps1 -Service eureka-server
-.\service.ps1 -Service user-service
-.\service.ps1 -Service movie-service
-.\service.ps1 -Service showtime-service
-.\service.ps1 -Service booking-service
-.\service.ps1 -Service api-gateway
-```
+All paths use `http://localhost:9090`. Except registration and login, send `Authorization: Bearer <JWT>`.
 
-Allow Eureka to load at `http://localhost:8762/` first. For the frontend:
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`. The gateway is `http://localhost:9090`. The scripts use the local properties file; invoking `mvnw.cmd` directly requires the equivalent environment configuration.
-
-## API examples
-
-Public: `POST /api/user/register` with `{"username":"viewer","password":"...","role":"USER"}`; `POST /api/user/login` with username and password returns a raw JWT. Use `Authorization: Bearer <JWT>` below.
-
-| Method | Gateway path | Purpose |
+| Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/user/me` | Authenticated ID, username, role |
-| GET | `/api/movies`, `/api/movies/{id}` | Catalog and movie detail |
+| POST | `/api/user/register` | Register |
+| POST | `/api/user/login` | Return raw JWT |
+| GET | `/api/user/me` | Current user |
+| GET | `/api/movies`, `/api/movies/{id}` | Catalog and detail |
 | POST / PUT / DELETE | `/api/movies/admin`, `/api/movies/admin/{id}` | Admin movie management |
 | GET | `/api/showtimes`, `/api/showtimes/{id}` | Screenings and detail |
 | POST | `/api/showtimes/admin` | Admin showtime creation |
-| POST | `/api/showtimes/reservations` | Hold `{"showtimeId":3,"quantity":2}` |
-| GET | `/api/showtimes/reservations/{id}` | Hold status and expiry |
-| POST | `/api/showtimes/reservations/{id}/confirm` | Confirm hold |
-| POST | `/api/showtimes/reservations/{id}/cancel` | Cancel hold |
-| POST | `/api/bookings` | Book `{"showtimeId":3,"seatsBooked":2}` |
-| GET | `/api/bookings/mine` | Current user's bookings |
-
-The reservation response has `reservationId`, `showtimeId`, `quantity`, `status`, and `expiresAt`. Existing legacy booking lookups by user ID are restricted to the authenticated owner. The frontend does not display a stored booking date because no such column exists.
+| POST / GET | `/api/showtimes/reservations`, `/api/showtimes/reservations/{id}` | Create or inspect a hold |
+| POST | `/api/showtimes/reservations/{id}/confirm`, `/cancel` | Confirm or cancel a hold |
+| POST | `/api/bookings` | Create a booking |
+| GET | `/api/bookings/mine` | Owned history |
 
 ```powershell
-$body=@{username='viewer';password='your-password'} | ConvertTo-Json
-$token=Invoke-RestMethod http://localhost:9090/api/user/login -Method Post -ContentType application/json -Body $body
+$body = @{username='viewer'; password='your-password'} | ConvertTo-Json
+$token = Invoke-RestMethod http://localhost:9090/api/user/login -Method Post -ContentType application/json -Body $body
 Invoke-RestMethod http://localhost:9090/api/movies -Headers @{Authorization="Bearer $token"}
-Invoke-RestMethod http://localhost:9090/api/showtimes -Headers @{Authorization="Bearer $token"}
+$booking = @{showtimeId=3; seatsBooked=2} | ConvertTo-Json
+Invoke-RestMethod http://localhost:9090/api/bookings -Method Post -ContentType application/json -Headers @{Authorization="Bearer $token"} -Body $booking
 ```
 
-## Testing and troubleshooting
+The booking request omits `userId`; the server resolves ownership. Registration currently requires `username`, `password` and `role`.
 
-Run `./service.ps1 -Service <name> -Action test` for each backend module. To build independently, run `.\mvnw.cmd clean package` inside its directory with the same local configuration. Run `npm run build` in `frontend/`. `scripts/booking-flow.ps1` and `scripts/reservation-flow.ps1` exercise live gateway flows and **create test accounts/bookings**; use them only against your local test database. They assume a seeded showtime and require all services running. Logs and generated builds are ignored.
+## Tests
 
-If a service fails to start, check MySQL/Redis availability, the shared JWT key, and its Maven output. A 503 soon after startup can mean Eureka has not refreshed; wait for clients to register. A 401 means the bearer token is absent or invalid. A 409 reservation response means insufficient free tickets or a reservation already completed. Frontend network errors can indicate a stopped gateway or a CORS origin other than `http://localhost:5173`.
+Run `.\service.ps1 -Service <module> -Action test` for each backend module, or `.\mvnw.cmd clean test` inside one module with equivalent configuration. Run `npm run build` in `frontend/`. [`scripts/booking-flow.ps1`](scripts/booking-flow.ps1) and [`scripts/reservation-flow.ps1`](scripts/reservation-flow.ps1) exercise a running local stack; they create test accounts/bookings and expect seeded showtimes.
 
-## Future improvements
+## Limitations and future work
 
-Restrict public role assignment; add durable reconciliation or an outbox for cross-service booking failures; add booking timestamps/status, broader unit and integration tests, production secret management, and production CORS settings. The current local configuration and `ddl-auto=update` are development defaults, not a production migration strategy.
+- Public registration currently accepts a requested role, including `ADMIN`. Restrict role assignment server-side before public deployment.
+- Redis holds and Booking/Showtime MySQL writes do not share a transaction. A crash after seat deduction but before booking persistence requires reconciliation.
+- Current JPA `ddl-auto=update` and fixed local CORS origin are development settings. Production needs migrations, managed secrets and environment-specific CORS.
+- Future work includes reconciliation/outbox handling, booking timestamps and statuses, broader integration tests and genuine UI screenshots.

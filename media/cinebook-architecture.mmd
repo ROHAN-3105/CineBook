@@ -1,0 +1,16 @@
+flowchart TB
+  UI[React + TypeScript<br/>localhost:5173] -->|HTTP + Bearer JWT| GW[Spring Cloud Gateway<br/>localhost:9090<br/>JWT validation + routing]
+  GW -->|Eureka discovery| EU[Eureka Server<br/>localhost:8762]
+  GW --> US[User Service<br/>dynamic port]
+  GW --> MS[Movie Service<br/>dynamic port]
+  GW --> SS[Showtime Service<br/>dynamic port]
+  GW --> BS[Booking Service<br/>dynamic port]
+  BS -->|OpenFeign: current user| US
+  BS -->|OpenFeign: reserve / confirm| SS
+  SS -->|OpenFeign: movie exists| MS
+  SS -->|OpenFeign: bookings| BS
+  US --> DB[(MySQL<br/>users + movies + showtimes + bookings)]
+  MS --> DB
+  SS -->|confirmed seat inventory| DB
+  BS -->|saved booking| DB
+  SS -->|temporary holds, expiry, cancel| R[(Redis / Memurai)]
