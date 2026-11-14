@@ -1,0 +1,3 @@
+# API Gateway
+
+Spring Cloud Gateway on port **9090** discovers the four APIs through Eureka at `http://localhost:8762/eureka`. Paths `/api/user/**`, `/api/movies/**`, `/api/showtimes/**`, and `/api/bookings/**` route by `lb://` service name. The global JWT filter accepts public registration/login, checks bearer tokens elsewhere, and forwards identity headers. CORS permits `http://localhost:5173` with GET, POST, PUT, PATCH, DELETE and OPTIONS. Requires the same Base64 `JWT_SECRET` as the services. Start Eureka first, then `.\service.ps1 -Service api-gateway` from the root (or `.\mvnw.cmd spring-boot:run` here with equivalent environment configuration). Run `.\mvnw.cmd clean test` here.

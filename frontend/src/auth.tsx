@@ -1,0 +1,6 @@
+import React,{createContext,useContext,useEffect,useState} from 'react';
+import {api,claims} from './api';
+type Auth={token:string|null;user:{sub:string;role:string;exp:number}|null;login:(u:string,p:string)=>Promise<void>;logout:()=>void};
+const Context=createContext<Auth>(null!);
+export function AuthProvider({children}:{children:React.ReactNode}){const [token,setToken]=useState(()=>localStorage.getItem('cinebook_token'));const logout=()=>{localStorage.removeItem('cinebook_token');setToken(null)};useEffect(()=>{const f=()=>setToken(localStorage.getItem('cinebook_token'));window.addEventListener('auth-change',f);return()=>window.removeEventListener('auth-change',f)},[]);let user=null;try{if(token)user=claims(token)}catch{} useEffect(()=>{if(!user)return;const delay=user.exp*1000-Date.now();if(delay<=0){logout();return}const timer=setTimeout(logout,delay);return()=>clearTimeout(timer)},[token]);const login=async(u:string,p:string)=>{const r=await api.post('/api/user/login',{username:u,password:p},{responseType:'text'});const c=claims(r.data);if(c.exp*1000<=Date.now())throw Error('Token expired');localStorage.setItem('cinebook_token',r.data);setToken(r.data)};return <Context.Provider value={{token,user,login,logout}}>{children}</Context.Provider>}
+export const useAuth=()=>useContext(Context);

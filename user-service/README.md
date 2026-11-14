@@ -1,0 +1,3 @@
+# User Service
+
+Spring Boot MVC, Security and JPA service for registration, BCrypt password storage, login and JWT generation. Dynamic port (`server.port=0`); clients use Eureka. Requires MySQL `movie_ticketing`, `SPRING_DATASOURCE_PASSWORD`, the shared Base64 `JWT_SECRET`, and Eureka on port 8762. Public `POST /api/user/register` accepts username, password and role; public `POST /api/user/login` returns a raw JWT. Authenticated `GET /api/user/me` returns ID, username and role, without a password. Existing public role selection needs server-side restriction before public deployment. From the root run `.\service.ps1 -Service user-service`, or here `.\mvnw.cmd spring-boot:run` after supplying local configuration. Test with `.\mvnw.cmd clean test`.
